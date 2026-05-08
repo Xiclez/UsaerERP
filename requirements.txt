@@ -3,5 +3,4 @@ uvicorn
 sqlalchemy
 jinja2
 python-multipart
-docxtpl 
-docx2pdf
+docxtpl

@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  usaer-app:
+    build: .
+    container_name: usaer_digital
+    restart: unless-stopped
+    ports:
+      - "8007:8000"
+    volumes:
+      # Montamos el archivo SQLite para que los datos persistan
+      - ./expedientes.db:/app/expedientes.db
+      # Montamos las plantillas por si necesitas modificarlas sin reconstruir la imagen
+      - ./plantillas:/app/plantillas

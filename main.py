@@ -3,14 +3,15 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from sqlalchemy.orm import Session
 from docxtpl import DocxTemplate
-from docx2pdf import convert
 import os
-import json 
+import json
+import subprocess
+import platform # <-- Nueva importación para detectar el Sistema Operativo
 import models, database
 
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="USAER Digital")
+app = FastAPI(title="USAER Digital - Gestión de Expedientes")
 templates = Jinja2Templates(directory="templates")
 
 DEFAULT_PARTICIPANTES = [
@@ -40,7 +41,7 @@ async def crear_alumno(
     nuevo_informe = models.InformeDeteccion(
         alumno_id=nuevo_alumno.id,
         participantes=json.dumps(DEFAULT_PARTICIPANTES),
-        planeacion="[]" # Se inicializa vacío para que el form lo llene
+        planeacion="[]"
     )
     db.add(nuevo_informe)
     db.commit()
@@ -49,35 +50,30 @@ async def crear_alumno(
 @app.get("/informe/{informe_id}", response_class=HTMLResponse)
 async def ver_informe(request: Request, informe_id: int, db: Session = Depends(database.get_db)):
     informe = db.query(models.InformeDeteccion).filter(models.InformeDeteccion.id == informe_id).first()
-    
     parts = json.loads(informe.participantes) if informe.participantes else []
     plan = json.loads(informe.planeacion) if informe.planeacion and informe.planeacion != "[]" else [{"r":"","i":"","fe":"","fr":"","o":""} for _ in range(8)]
-    
     return templates.TemplateResponse(request=request, name="informe.html", context={"informe": informe, "participantes": parts, "planeacion": plan})
 
 @app.patch("/api/informe/{informe_id}")
 async def guardar_progreso(informe_id: int, request: Request, db: Session = Depends(database.get_db)):
     form_data = await request.form()
     informe = db.query(models.InformeDeteccion).filter(models.InformeDeteccion.id == informe_id).first()
-    if not informe: return HTMLResponse("Error")
+    if not informe:
+        return HTMLResponse("Error: Informe no encontrado", status_code=404)
 
-    # 1. Guardar textos normales
-    campos_texto = ['docente', 'fecha_elaboracion', 'condicion_discapacidad', 'antecedentes_escolares', 
-                    'evaluacion_inicial', 'area_comunicativa', 'area_motriz', 'requiere_evaluacion', 'motivo_evaluacion']
+    campos_texto = ['docente', 'fecha_elaboracion', 'condicion_discapacidad', 'antecedentes_escolares', 'evaluacion_inicial', 'area_comunicativa', 'area_motriz', 'requiere_evaluacion', 'motivo_evaluacion']
     for campo in campos_texto:
         if campo in form_data:
             setattr(informe, campo, form_data[campo])
 
-    # 2. Guardar Participantes
     if 'part_nombre[]' in form_data:
         nombres = form_data.getlist('part_nombre[]')
         areas = form_data.getlist('part_area[]')
-        parts = [{"nombre": n, "area": a} for n, a in zip(nombres, areas) if n.strip() != "" or a.strip() != ""]
+        parts = [{"nombre": n, "area": a} for n, a in zip(nombres, areas) if n.strip() or a.strip()]
         informe.participantes = json.dumps(parts)
     else:
         informe.participantes = "[]"
 
-    # 3. Guardar Planeación
     if 'plan_resp[]' in form_data:
         resps = form_data.getlist('plan_resp[]')
         insts = form_data.getlist('plan_inst[]')
@@ -103,7 +99,6 @@ async def guardar_progreso(informe_id: int, request: Request, db: Session = Depe
 async def exportar_pdf(informe_id: int, db: Session = Depends(database.get_db)):
     informe = db.query(models.InformeDeteccion).filter(models.InformeDeteccion.id == informe_id).first()
     doc = DocxTemplate("plantillas/plantilla_idi.docx")
-    
     plan_data = json.loads(informe.planeacion) if informe.planeacion and informe.planeacion != "[]" else [{"r":"","i":"","fe":"","fr":"","o":""} for _ in range(8)]
     
     contexto = {
@@ -122,8 +117,6 @@ async def exportar_pdf(informe_id: int, db: Session = Depends(database.get_db)):
         "req_si": "X" if informe.requiere_evaluacion == "Sí" else "",
         "req_no": "X" if informe.requiere_evaluacion == "No" else "",
         "participantes": json.loads(informe.participantes) if informe.participantes else [],
-        
-        # Mapa de la tabla de planeación para Word
         **{f"p{i+1}_r": row["r"] for i, row in enumerate(plan_data)},
         **{f"p{i+1}_i": row["i"] for i, row in enumerate(plan_data)},
         **{f"p{i+1}_fe": row["fe"] for i, row in enumerate(plan_data)},
@@ -132,13 +125,28 @@ async def exportar_pdf(informe_id: int, db: Session = Depends(database.get_db)):
     }
     
     doc.render(contexto)
-    docx_filename = f"Informe_{informe.alumno.nombre}.docx"
-    pdf_filename = f"Informe_{informe.alumno.nombre}.pdf"
+    safe_name = informe.alumno.nombre.replace(" ", "_")
+    docx_filename = f"Informe_{safe_name}.docx"
+    pdf_filename = f"Informe_{safe_name}.pdf"
     
-    ruta_docx_absoluta = os.path.abspath(docx_filename)
-    ruta_pdf_absoluta = os.path.abspath(pdf_filename)
+    ruta_docx = os.path.abspath(docx_filename)
+    ruta_pdf = os.path.abspath(pdf_filename)
+    doc.save(ruta_docx)
     
-    doc.save(ruta_docx_absoluta)
-    convert(ruta_docx_absoluta, ruta_pdf_absoluta)
+    # --- LOGICA INTELIGENTE DE SISTEMA OPERATIVO ---
+    try:
+        if platform.system() == "Windows":
+            # Entorno de desarrollo local (Tu PC)
+            from docx2pdf import convert as convert_pdf
+            convert_pdf(ruta_docx, ruta_pdf)
+        else:
+            # Entorno Docker (Linux)
+            subprocess.run([
+                "libreoffice", "--headless", "--convert-to", "pdf",
+                ruta_docx, "--outdir", os.path.dirname(ruta_docx)
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"Error en conversión: {e}")
+        return HTMLResponse(f"Error generando el PDF. Detalle: {e}", status_code=500)
     
-    return FileResponse(ruta_pdf_absoluta, filename=pdf_filename, media_type='application/pdf')
+    return FileResponse(ruta_pdf, filename=pdf_filename, media_type='application/pdf')
