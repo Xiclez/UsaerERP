@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - USAER 7505</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #eef2f5; font-family: 'Inter', sans-serif; }
+        /* Clases Neumórficas */
+        .neu-card { 
+            background: #ffffff; 
+            box-shadow: 10px 10px 20px #d1d9e6, -10px -10px 20px #ffffff; 
+            border-radius: 1.5rem; 
+        }
+        .neu-btn { 
+            background: #ffffff; 
+            box-shadow: 5px 5px 10px #d1d9e6, -5px -5px 10px #ffffff; 
+            border-radius: 1rem; 
+            transition: all 0.2s ease-in-out; 
+            cursor: pointer;
+        }
+        .neu-btn:active { 
+            box-shadow: inset 5px 5px 10px #d1d9e6, inset -5px -5px 10px #ffffff; 
+        }
+        .neu-input { 
+            background: #f7f9fb; 
+            box-shadow: inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff; 
+            border: none; 
+            border-radius: 0.8rem; 
+            outline: none;
+        }
+        .neu-input:focus {
+            box-shadow: inset 6px 6px 12px #c5d0e0, inset -6px -6px 12px #ffffff;
+        }
+    </style>
+</head>
+<body class="p-6 md:p-12 text-gray-600 min-h-screen">
+
+    <div class="max-w-6xl mx-auto relative">
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-4">
+            <div>
+                <h1 class="text-4xl font-extrabold text-gray-800">USAER <span class="text-blue-600">7505</span></h1>
+                <p class="text-gray-500 text-sm mt-1">Gestión de Expedientes de Educación Especial</p>
+            </div>
+            <div class="flex gap-4 items-center">
+                <button onclick="document.getElementById('modal-registro').classList.remove('hidden')" 
+                        class="px-6 py-3 neu-btn text-blue-600 font-bold hover:text-blue-700 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Registrar Alumno
+                </button>
+                <div class="w-12 h-12 neu-btn flex items-center justify-center text-blue-600 font-bold text-lg">OI</div>
+            </div>
+        </div>
+
+        <h2 class="text-xl font-bold mb-6 text-gray-700 ml-2">Alumnos Registrados</h2>
+        
+        {% if alumnos %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {% for alumno in alumnos %}
+            <div class="neu-card p-6 flex flex-col justify-between border-l-4 border-blue-500">
+                <div class="mb-6">
+                    <h3 class="font-bold text-gray-800 text-xl mb-1">{{ alumno.nombre }}</h3>
+                    <div class="text-sm text-gray-500 space-y-1">
+                        <p><span class="font-semibold text-gray-400">Escuela:</span> {{ alumno.escuela }}</p>
+                        <p><span class="font-semibold text-gray-400">Grado:</span> {{ alumno.grado_grupo }}</p>
+                        <p><span class="font-semibold text-gray-400">Edad:</span> {{ alumno.edad }}</p>
+                    </div>
+                </div>
+                <a href="/informe/{{ alumno.informes[0].id }}" class="py-3 neu-btn text-blue-500 font-bold text-center block w-full hover:text-blue-600">
+                    Abrir Expediente
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12 text-gray-400">
+            <p>No hay alumnos registrados aún. Haz clic en "Registrar Alumno" para comenzar.</p>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <div id="modal-registro" class="hidden fixed inset-0 bg-gray-900 bg-opacity-40 backdrop-blur-sm overflow-y-auto h-full w-full flex items-center justify-center z-50 transition-all">
+        <div class="neu-card p-8 w-full max-w-md relative mx-4">
+            
+            <button onclick="document.getElementById('modal-registro').classList.add('hidden')" 
+                    class="absolute top-4 right-6 text-gray-400 font-bold text-2xl hover:text-red-500 cursor-pointer">&times;</button>
+            
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Nuevo Registro</h2>
+            
+            <form action="/alumnos/nuevo" method="POST" class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold ml-2 mb-1 uppercase text-gray-400">Nombre Completo</label>
+                    <input type="text" name="nombre" required placeholder="Ej. Abraham Martínez Nery" class="neu-input w-full p-4 text-sm text-gray-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold ml-2 mb-1 uppercase text-gray-400">Edad</label>
+                    <input type="text" name="edad" required placeholder="Ej. 12 años 4 meses" class="neu-input w-full p-4 text-sm text-gray-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold ml-2 mb-1 uppercase text-gray-400">Escuela</label>
+                    <input type="text" name="escuela" required placeholder="Ej. Secundaria Estatal 3006" class="neu-input w-full p-4 text-sm text-gray-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold ml-2 mb-1 uppercase text-gray-400">Grado y Grupo</label>
+                    <input type="text" name="grado_grupo" required placeholder="Ej. 1°B" class="neu-input w-full p-4 text-sm text-gray-700">
+                </div>
+                <button type="submit" class="w-full p-4 mt-6 neu-btn text-blue-600 text-lg font-extrabold hover:text-blue-700">
+                    Guardar Alumno
+                </button>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
